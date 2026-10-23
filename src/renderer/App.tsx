@@ -1,0 +1,98 @@
+import { useEffect, useMemo, useState } from "react";
+import { FolderOpen, FolderSearch, LayoutDashboard, Package, Play, Plus, RefreshCw, Search, Settings, Sparkles, Square, TerminalSquare, Wrench } from "lucide-react";
+import type { AppSettings, CreateProjectRequest, DependencyInfo, ManagedProcess, PackageResult, Project, ToolInfo } from "../shared/contracts";
+
+type View = "overview" | "processes" | "packages" | "settings";
+
+function App(): JSX.Element {
+  const [view, setView] = useState<View>("overview");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [processes, setProcesses] = useState<ManagedProcess[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  async function load(): Promise<void> {
+    setLoading(true);
+    try {
+      const [nextSettings, nextProjects, nextProcesses] = await Promise.all([window.npmui.settings.get(), window.npmui.projects.refresh(), window.npmui.projects.processes()]);
+      setSettings(nextSettings); setProjects(nextProjects); setProcesses(nextProcesses);
+      setSelectedId((current) => current && nextProjects.some((project) => project.id === current) ? current : nextProjects[0]?.id ?? null);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not load workspace."); }
+    finally { setLoading(false); }
+  }
+  useEffect(() => { void load(); return window.npmui.projects.onProcessOutput((next) => setProcesses((current) => current.some((item) => item.id === next.id) ? current.map((item) => item.id === next.id ? next : item) : [next, ...current])); }, []);
+
+  async function chooseDirectory(): Promise<void> {
+    const directory = await window.npmui.projects.selectDirectory(); if (!directory) return;
+    try { const next = await window.npmui.settings.update({ ...(settings ?? { preferredShell: "powershell", customToolPaths: {} }), projectsDirectory: directory }); setSettings(next); setProjects(await window.npmui.projects.refresh()); setMessage("Projects directory updated."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Could not update the projects directory."); }
+  }
+  const filtered = useMemo(() => { const term = query.trim().toLowerCase(); return term ? projects.filter((project) => `${project.name} ${project.path} ${project.framework ?? ""}`.toLowerCase().includes(term)) : projects; }, [projects, query]);
+  const selected = projects.find((project) => project.id === selectedId) ?? null;
+
+  return <div className="app-shell">
+    <aside className="sidebar"><div className="brand"><div className="brand-mark"><Sparkles size={17} /></div><span>npmUI</span></div><div className="nav-label">Workspace</div>
+      <Nav icon={<LayoutDashboard size={17} />} label="Overview" active={view === "overview"} onClick={() => setView("overview")} />
+      <Nav icon={<TerminalSquare size={17} />} label="Processes" active={view === "processes"} onClick={() => setView("processes")} count={processes.filter((item) => item.status === "running").length || undefined} />
+      <Nav icon={<Package size={17} />} label="Package explorer" active={view === "packages"} onClick={() => setView("packages")} />
+      <div className="sidebar-spacer" /><div className="directory-card"><FolderOpen size={16} className="directory-icon" /><div className="directory-copy"><span>Projects directory</span><strong title={settings?.projectsDirectory}>{settings?.projectsDirectory ?? "Loading..."}</strong></div><button className="icon-button" onClick={() => void chooseDirectory()}><Settings size={16} /></button></div>
+      <Nav icon={<Settings size={17} />} label="Settings" active={view === "settings"} onClick={() => setView("settings")} /></aside>
+    <main className="main-content"><header className="topbar"><div><p className="eyebrow">Local workspace</p><h1>{view === "overview" ? "Good to see you." : view === "processes" ? "Managed processes" : view === "packages" ? "Package explorer" : "Workspace settings"}</h1></div><div className="top-actions"><button className="secondary-button" onClick={() => setCreateOpen(true)}><Plus size={15} /> New project</button><button className="refresh-button" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""} /> Refresh</button></div></header>
+      {message && <div className="notice">{message}<button onClick={() => setMessage(null)}>Dismiss</button></div>}
+      {view === "overview" && <Overview projects={filtered} allProjects={projects} selected={selected} query={query} setQuery={setQuery} setSelectedId={setSelectedId} onMessage={setMessage} loading={loading} chooseDirectory={chooseDirectory} />}
+      {view === "processes" && <ProcessView processes={processes} onStop={(id) => window.npmui.projects.stopProcess(id).catch((error) => setMessage(error instanceof Error ? error.message : "Could not stop process."))} />}
+      {view === "packages" && <PackageView projects={projects} selected={selected} setSelectedId={setSelectedId} onMessage={setMessage} />}
+      {view === "settings" && <SettingsView settings={settings} onSaved={setSettings} onMessage={setMessage} />}
+      {createOpen && <CreateProject onClose={() => setCreateOpen(false)} onMessage={setMessage} />}
+    </main>
+  </div>;
+}
+
+function Nav({ icon, label, active, onClick, count }: { icon: JSX.Element; label: string; active: boolean; onClick: () => void; count?: number }): JSX.Element {
+  return <button className={`nav-item ${active ? "active" : ""}`} onClick={onClick}>{icon}{label}{count !== undefined && <span className="nav-badge">{count}</span>}</button>;
+}
+
+function Overview({ projects, allProjects, selected, query, setQuery, setSelectedId, onMessage, loading, chooseDirectory }: { projects: Project[]; allProjects: Project[]; selected: Project | null; query: string; setQuery: (value: string) => void; setSelectedId: (value: string) => void; onMessage: (value: string) => void; loading: boolean; chooseDirectory: () => Promise<void> }): JSX.Element {
+  return <><section className="hero-card"><div><div className="hero-kicker"><span className="status-dot" /> Offline-ready workspace</div><h2>Your projects, close at hand.</h2><p>Discover local projects, run scripts, inspect dependencies, and keep your development flow in one calm place.</p></div><div className="hero-stat"><strong>{allProjects.length}</strong><span>{allProjects.length === 1 ? "project found" : "projects found"}</span></div></section><section className="content-section"><div className="section-heading"><div><p className="eyebrow">Workspace index</p><h2>Projects</h2></div><div className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects..." /></div></div>{loading ? <div className="state-card"><RefreshCw className="spin" /><span>Scanning your local workspace...</span></div> : projects.length === 0 ? <div className="state-card"><FolderSearch size={28} /><strong>{allProjects.length ? "No matching projects" : "No projects discovered yet"}</strong><span>{allProjects.length ? "Try a different search term." : "Choose a directory containing your local projects."}</span>{!allProjects.length && <button className="primary-button" onClick={() => void chooseDirectory()}>Choose directory</button>}</div> : <div className="workspace-grid">{projects.map((project) => <ProjectCard key={project.id} project={project} selected={project.id === selected?.id} onClick={() => setSelectedId(project.id)} />)}</div>}</section>{selected && <ProjectDetails project={selected} onMessage={onMessage} />}</>;
+}
+
+function ProjectCard({ project, selected, onClick }: { project: Project; selected: boolean; onClick: () => void }): JSX.Element {
+  return <button className={`project-card ${selected ? "selected" : ""}`} onClick={onClick}><div className="card-topline"><div className="project-avatar">{project.name.slice(0, 1).toUpperCase()}</div><span className="project-kind">{project.framework ?? (project.kind === "node" ? "Node.js" : "Project")}</span></div><h3>{project.name}</h3><p className="project-path">{project.path}</p><div className="card-meta"><span>{project.scripts.length} scripts</span><span>{project.dependencies.production + project.dependencies.development} dependencies</span>{project.git && <span className="git-pill">Git</span>}</div></button>;
+}
+
+function ProjectDetails({ project, onMessage }: { project: Project; onMessage: (value: string) => void }): JSX.Element {
+  const [running, setRunning] = useState(false);
+  return <section className="details-panel"><div className="details-header"><div><p className="eyebrow">Selected project</p><h2>{project.name}</h2><p className="detail-path">{project.path}</p></div><div className="detail-actions"><button className="secondary-button" onClick={() => window.npmui.projects.openInExplorer(project.id).catch((error) => onMessage(error instanceof Error ? error.message : "Could not open Explorer."))}><FolderOpen size={15} /> Explorer</button><button className="primary-button" onClick={() => window.npmui.projects.openInVscode(project.id).catch((error) => onMessage(error instanceof Error ? error.message : "Could not open VS Code."))}><TerminalSquare size={15} /> VS Code</button></div></div><div className="detail-grid"><div><span className="detail-label">Scripts</span><strong>{project.scripts.length}</strong></div><div><span className="detail-label">Dependencies</span><strong>{project.dependencies.production + project.dependencies.development}</strong></div><div><span className="detail-label">Package manager</span><strong>{project.packageManager ?? "npm default"}</strong></div><div><span className="detail-label">Version</span><strong>{project.packageVersion ?? "Not specified"}</strong></div></div>{project.description && <p className="description">{project.description}</p>}<div className="scripts-row"><span className="detail-label">Run a script</span>{project.scripts.length ? project.scripts.map((script) => <button className="script-button" key={script.name} disabled={running} onClick={() => { setRunning(true); void window.npmui.projects.runScript(project.id, script.name).then(() => onMessage(`Started ${script.name}.`)).catch((error) => onMessage(error instanceof Error ? error.message : "Could not start script.")).finally(() => setRunning(false)); }}><Play size={11} /> {script.name}</button>) : <span className="muted-text">No scripts declared</span>}</div></section>;
+}
+
+function ProcessView({ processes, onStop }: { processes: ManagedProcess[]; onStop: (id: string) => void }): JSX.Element {
+  return <section className="page-section"><div className="section-heading"><div><p className="eyebrow">Execution history</p><h2>Processes</h2></div></div>{processes.length === 0 ? <div className="state-card"><TerminalSquare size={28} /><strong>No managed processes</strong><span>Run a project script to see live output here.</span></div> : <div className="process-list">{processes.map((process) => <article className="process-card" key={process.id}><div className="process-heading"><div><strong>{process.label}</strong><span>{process.command}</span></div>{process.status === "running" ? <button className="danger-button" onClick={() => onStop(process.id)}><Square size={12} /> Stop</button> : <span className={`process-status ${process.status}`}>{process.status}</span>}</div><pre>{process.output || "Waiting for output..."}</pre></article>)}</div>}</section>;
+}
+
+function PackageView({ projects, selected, setSelectedId, onMessage }: { projects: Project[]; selected: Project | null; setSelectedId: (id: string) => void; onMessage: (value: string) => void }): JSX.Element {
+  const [term, setTerm] = useState(""); const [results, setResults] = useState<PackageResult[]>([]); const [dependencies, setDependencies] = useState<DependencyInfo[]>([]); const [dev, setDev] = useState(false);
+  useEffect(() => { if (selected) void window.npmui.packages.dependencies(selected.id).then(setDependencies).catch(() => setDependencies([])); }, [selected]);
+  async function search(): Promise<void> { try { setResults(await window.npmui.packages.search(term)); } catch (error) { onMessage(error instanceof Error ? error.message : "Registry search failed."); } }
+  async function install(name: string): Promise<void> { if (!selected) { onMessage("Select a project first."); return; } try { await window.npmui.packages.install(selected.id, name, dev); onMessage(`Installing ${name} in ${selected.name}.`); } catch (error) { onMessage(error instanceof Error ? error.message : "Install failed."); } }
+  return <section className="page-section"><div className="package-toolbar"><div className="search-box package-search"><Search size={17} /><input value={term} onChange={(event) => setTerm(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void search(); }} placeholder="Search the npm Registry..." /><button onClick={() => void search()}>Search</button></div><select value={selected?.id ?? ""} onChange={(event) => { if (event.target.value) setSelectedId(event.target.value); }}><option value="">Select a project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select><label className="check-label"><input type="checkbox" checked={dev} onChange={(event) => setDev(event.target.checked)} /> dev dependency</label></div><div className="package-columns"><div className="package-results">{results.map((pkg) => <article className="package-card" key={pkg.name}><div><strong>{pkg.name}</strong><span>v{pkg.version}</span></div><p>{pkg.description || "No description provided."}</p><small>{pkg.weeklyDownloads ? `${pkg.weeklyDownloads.toLocaleString()} weekly downloads` : "Registry metadata"}</small><button className="secondary-button" onClick={() => void install(pkg.name)}><Plus size={14} /> Install</button></article>)}</div><div className="dependency-panel"><p className="eyebrow">Local manifest</p><h3>{selected ? selected.name : "Select a project"}</h3>{dependencies.map((dependency) => <div className="dependency-row" key={`${dependency.type}-${dependency.name}`}><span>{dependency.name}</span><code>{dependency.range}</code><small>{dependency.type}</small>{selected && <button className="text-button" onClick={() => void window.npmui.packages.remove(selected.id, dependency.name).then(() => onMessage(`Removing ${dependency.name}.`)).catch((error) => onMessage(error instanceof Error ? error.message : "Remove failed."))}>Remove</button>}</div>)}</div></div></section>;
+}
+
+function CreateProject({ onClose, onMessage }: { onClose: () => void; onMessage: (message: string) => void }): JSX.Element {
+  const [request, setRequest] = useState<CreateProjectRequest>({ name: "", destination: "", template: "node", packageManager: "npm" });
+  async function choose(): Promise<void> { const destination = await window.npmui.creation.selectDestination(); if (destination) setRequest((current) => ({ ...current, destination })); }
+  async function create(): Promise<void> { try { await window.npmui.creation.create(request); onMessage(`Creating ${request.name}.`); onClose(); } catch (error) { onMessage(error instanceof Error ? error.message : "Could not create project."); } }
+  return <div className="modal-backdrop"><div className="modal-card"><div className="details-header"><div><p className="eyebrow">Project wizard</p><h2>Create a project</h2></div><button className="icon-button" onClick={onClose}>×</button></div><label className="field-label">Project name<input value={request.name} onChange={(event) => setRequest({ ...request, name: event.target.value })} placeholder="my-project" /></label><label className="field-label">Destination<div className="inline-field"><input value={request.destination} onChange={(event) => setRequest({ ...request, destination: event.target.value })} placeholder="Choose a parent directory" /><button className="secondary-button" onClick={() => void choose()}>Browse</button></div></label><label className="field-label">Template<select value={request.template} onChange={(event) => setRequest({ ...request, template: event.target.value as CreateProjectRequest["template"] })}><option value="node">Basic Node.js</option><option value="typescript">Node.js + TypeScript</option><option value="vite">Vite React + TypeScript</option><option value="next">Next.js</option></select></label><label className="field-label">Package manager<select value={request.packageManager} onChange={(event) => setRequest({ ...request, packageManager: event.target.value as CreateProjectRequest["packageManager"] })}><option value="npm">npm</option><option value="pnpm">pnpm</option><option value="yarn">Yarn</option></select></label><div className="modal-actions"><button className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" onClick={() => void create()}><Plus size={14} /> Create</button></div></div></div>;
+}
+
+function SettingsView({ settings, onSaved, onMessage }: { settings: AppSettings | null; onSaved: (settings: AppSettings) => void; onMessage: (message: string) => void }): JSX.Element {
+  const [tools, setTools] = useState<ToolInfo[]>([]); const [shell, setShell] = useState(settings?.preferredShell ?? "powershell");
+  useEffect(() => { void window.npmui.settings.detectTools().then(setTools); }, []);
+  async function save(): Promise<void> { if (!settings) return; try { const next = await window.npmui.settings.update({ ...settings, preferredShell: shell }); onSaved(next); onMessage("Settings saved."); } catch (error) { onMessage(error instanceof Error ? error.message : "Could not save settings."); } }
+  return <section className="page-section"><div className="settings-card"><p className="eyebrow">Execution environment</p><h2>Settings</h2><label className="field-label">Preferred shell<select value={shell} onChange={(event) => setShell(event.target.value as "cmd" | "powershell")}><option value="powershell">PowerShell</option><option value="cmd">Command Prompt</option></select></label><button className="primary-button" onClick={() => void save()}>Save settings</button></div><div className="settings-card"><div className="section-heading"><div><p className="eyebrow">Local availability</p><h2>Toolchain</h2></div><Wrench size={20} /></div><div className="tool-grid">{tools.map((tool) => <div className="tool-row" key={tool.name}><span>{tool.name}</span><strong className={tool.available ? "available" : "unavailable"}>{tool.available ? tool.version : "Unavailable"}</strong><code>{tool.executable}</code></div>)}</div></div></section>;
+}
+
+export default App;
