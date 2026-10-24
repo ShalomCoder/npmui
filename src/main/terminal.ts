@@ -66,7 +66,7 @@ export function createTerminal(cwd?: string, profile?: ShellProfile): TerminalSe
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Unable to start ${selected.name} (${selected.command}): ${detail}`);
   }
-  const session = { id, cwd: workingDirectory, shell: selected.name };
+  const session = { id, cwd: workingDirectory, shell: selected.name, shellId: selected.id };
   const runtime = { session, process: terminalProcess };
   sessions.set(id, runtime);
   terminalProcess.onData((data) => dataListener?.({ id, data }));

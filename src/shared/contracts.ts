@@ -83,6 +83,7 @@ export interface TerminalSession {
   id: string;
   cwd: string;
   shell: string;
+  shellId: string;
 }
 
 export interface ShellProfile {
@@ -91,6 +92,7 @@ export interface ShellProfile {
   command: string;
   args: string[];
   source: string;
+  icon?: string;
 }
 
 export interface NpmuiApi {

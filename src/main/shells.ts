@@ -1,6 +1,7 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import type { ShellProfile } from "../shared/contracts";
 
 function stripJsonComments(source: string): string {
@@ -36,7 +37,40 @@ function configCandidates(): string[] {
   ];
 }
 
+function expandWindowsVariables(value: string): string {
+  return value.replace(/%([^%]+)%/g, (_match, variable: string) => process.env[variable] ?? `%${variable}%`);
+}
+
+function normalizeIcon(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const icon = expandWindowsVariables(value.trim());
+  if (icon.startsWith("file://") || icon.startsWith("ms-appx://") || icon.startsWith("data:")) return icon;
+  if (path.isAbsolute(icon)) return pathToFileURL(icon).toString();
+  return undefined;
+}
+
+async function installedGitBash(): Promise<ShellProfile[]> {
+  if (process.platform !== "win32") return [];
+  const candidates = [
+    path.join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe"),
+    path.join(process.env["ProgramW6432"] ?? "C:\\Program Files", "Git", "bin", "bash.exe"),
+    path.join(process.env.ProgramFiles86 ?? "C:\\Program Files (x86)", "Git", "bin", "bash.exe"),
+    path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Git", "bin", "bash.exe"),
+    path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Git", "usr", "bin", "bash.exe")
+  ];
+  for (const command of candidates) {
+    try {
+      await access(command);
+      return [{ id: "git-bash", name: "Git Bash", command, args: ["--login", "-i"], source: "Git for Windows", icon: command }];
+    } catch {
+      // Continue looking through common Git for Windows locations.
+    }
+  }
+  return [];
+}
+
 export async function readShellProfiles(): Promise<ShellProfile[]> {
+  const discovered: ShellProfile[] = [];
   for (const filename of configCandidates()) {
     try {
       const parsed = JSON.parse(stripJsonComments(await readFile(filename, "utf8"))) as {
@@ -54,15 +88,21 @@ export async function readShellProfiles(): Promise<ShellProfile[]> {
           name,
           command: split.command,
           args: split.args,
-          source: filename
+          source: filename,
+          icon: normalizeIcon(profile.icon)
         }];
       });
-      if (result.length) return result;
+      discovered.push(...result);
     } catch {
       // Try the next Windows Terminal installation/configuration.
     }
   }
-  return [];
+  const gitBash = await installedGitBash();
+  const profiles = [...discovered, ...gitBash];
+  return profiles.filter((profile, index) => profiles.findIndex((candidate) => (
+    candidate.id === profile.id
+    || (candidate.command.toLowerCase() === profile.command.toLowerCase() && candidate.args.join("\0") === profile.args.join("\0"))
+  )) === index);
 }
 
 export function defaultTerminalDirectory(): string {
