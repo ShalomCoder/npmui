@@ -1,6 +1,8 @@
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import * as pty from "node-pty";
 import type { ShellProfile, TerminalSession } from "../shared/contracts";
 
@@ -22,20 +24,48 @@ export function setTerminalListeners(
 }
 
 function fallbackShell(): ShellProfile {
-  return { id: "system-default", name: "System default", command: process.platform === "win32" ? process.env.ComSpec ?? "cmd.exe" : process.env.SHELL ?? "/bin/sh", args: [], source: "system" };
+  const command = process.platform === "win32" ? process.env.ComSpec ?? "C:\\Windows\\System32\\cmd.exe" : process.env.SHELL ?? "/bin/sh";
+  return { id: "system-default", name: "System default", command, args: [], source: "system" };
+}
+
+function expandWindowsVariables(value: string): string {
+  return value.replace(/%([^%]+)%/g, (_match, variable: string) => process.env[variable] ?? `%${variable}%`);
+}
+
+function resolveCommand(command: string): string | null {
+  const expanded = process.platform === "win32" ? expandWindowsVariables(command.trim()) : command.trim();
+  if (!expanded) return null;
+  if (process.platform !== "win32") return expanded;
+  const normalized = expanded.toLowerCase();
+  if (normalized === "cmd" || normalized === "cmd.exe") return process.env.ComSpec ?? "C:\\Windows\\System32\\cmd.exe";
+  if (path.isAbsolute(expanded)) return existsSync(expanded) ? expanded : null;
+  try {
+    const resolved = execFileSync("where.exe", [expanded], { encoding: "utf8", windowsHide: true }).split(/\r?\n/).find(Boolean);
+    return resolved?.trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 export function createTerminal(cwd?: string, profile?: ShellProfile): TerminalSession {
-  const selected = profile && profile.command.trim() ? profile : fallbackShell();
+  const requested = profile && profile.command.trim() ? profile : fallbackShell();
+  const command = resolveCommand(requested.command);
+  const selected = command ? { ...requested, command } : fallbackShell();
   const workingDirectory = cwd && path.isAbsolute(cwd) ? cwd : os.homedir();
   const id = crypto.randomUUID();
-  const terminalProcess = pty.spawn(selected.command, selected.args, {
-    name: "xterm-256color",
-    cols: 100,
-    rows: 30,
-    cwd: workingDirectory,
-    env: { ...process.env, TERM: "xterm-256color" } as Record<string, string>
-  });
+  let terminalProcess: pty.IPty;
+  try {
+    terminalProcess = pty.spawn(selected.command, selected.args, {
+      name: "xterm-256color",
+      cols: 100,
+      rows: 30,
+      cwd: workingDirectory,
+      env: { ...process.env, TERM: "xterm-256color" } as Record<string, string>
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Unable to start ${selected.name} (${selected.command}): ${detail}`);
+  }
   const session = { id, cwd: workingDirectory, shell: selected.name };
   const runtime = { session, process: terminalProcess };
   sessions.set(id, runtime);
