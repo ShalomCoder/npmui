@@ -45,6 +45,7 @@ function WorkspaceApp(): JSX.Element {
     return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", stop); };
   }, [resizingTerminal]);
   const selectedProjectView = view === "overview" && selected ? <ProjectDetailPage project={selected} onBack={() => setSelectedId("")} onMessage={setMessage} /> : null;
+  const terminalCwd = settings?.projectsDirectory;
 
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand"><div className="brand-mark"><Sparkles size={17} /></div><span>npmUI</span></div><div className="nav-label">Workspace</div>
@@ -53,7 +54,7 @@ function WorkspaceApp(): JSX.Element {
       <Nav icon={<Package size={17} />} label="Package explorer" active={view === "packages"} onClick={() => setView("packages")} />
       <div className="sidebar-spacer" /><div className="directory-card"><FolderOpen size={16} className="directory-icon" /><div className="directory-copy"><span>Projects directory</span><strong title={settings?.projectsDirectory}>{settings?.projectsDirectory ?? "Loading..."}</strong></div><button className="icon-button" onClick={() => void chooseDirectory()}><Settings size={16} /></button></div>
       <Nav icon={<Settings size={17} />} label="Settings" active={view === "settings"} onClick={() => setView("settings")} /></aside>
-    <main className={`main-content ${terminalOpen ? "with-terminal" : ""}`}><header className="topbar"><div><p className="eyebrow">Local workspace</p><h1>{selectedProjectView ? selected?.name : view === "overview" ? "Good to see you." : view === "processes" ? "Managed processes" : view === "packages" ? "Package explorer" : "Workspace settings"}</h1></div><div className="top-actions">{selected && <button className="secondary-button" onClick={() => setTerminalOpen((current) => !current)}><PanelRight size={15} /> Terminal</button>}<button className="secondary-button" onClick={() => setCreateOpen(true)}><Plus size={15} /> New project</button><button className="refresh-button" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""} /> Refresh</button></div></header>
+    <main className={`main-content ${terminalOpen ? "with-terminal" : ""}`}><header className="topbar"><div><p className="eyebrow">Local workspace</p><h1>{selectedProjectView ? selected?.name : view === "overview" ? "Good to see you." : view === "processes" ? "Managed processes" : view === "packages" ? "Package explorer" : "Workspace settings"}</h1></div><div className="top-actions"><button className="secondary-button" onClick={() => setTerminalOpen((current) => !current)} title={terminalCwd ? `Open terminal in ${terminalCwd}` : "Open terminal"}><PanelRight size={15} /> Terminal</button><button className="secondary-button" onClick={() => setCreateOpen(true)}><Plus size={15} /> New project</button><button className="refresh-button" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""} /> Refresh</button></div></header>
       {message && <div className="notice">{message}<button onClick={() => setMessage(null)}>Dismiss</button></div>}
       {selectedProjectView ?? (view === "overview" && <Overview projects={filtered} allProjects={projects} selected={selected} query={query} setQuery={setQuery} setSelectedId={setSelectedId} onMessage={setMessage} loading={loading} chooseDirectory={chooseDirectory} />)}
       {view === "processes" && <ProcessView processes={processes} onStop={(id) => window.npmui.projects.stopProcess(id).catch((error) => setMessage(error instanceof Error ? error.message : "Could not stop process."))} />}
@@ -61,7 +62,7 @@ function WorkspaceApp(): JSX.Element {
       {view === "settings" && <SettingsView settings={settings} onSaved={setSettings} onMessage={setMessage} />}
       {createOpen && <CreateProject onClose={() => setCreateOpen(false)} onMessage={setMessage} />}
     </main>
-    {terminalOpen && <aside className="terminal-dock" style={{ width: terminalWidth }}><div className="terminal-resizer" onMouseDown={() => setResizingTerminal(true)} /><TerminalWorkspace initialCwd={selected?.path} onClose={() => setTerminalOpen(false)} /></aside>}
+    {terminalOpen && <aside className="terminal-dock" style={{ width: terminalWidth }}><div className="terminal-resizer" onMouseDown={() => setResizingTerminal(true)} /><TerminalWorkspace initialCwd={terminalCwd} onClose={() => setTerminalOpen(false)} /></aside>}
   </div>;
 }
 
