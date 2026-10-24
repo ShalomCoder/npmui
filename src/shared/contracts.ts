@@ -77,6 +77,10 @@ export interface AppSettings {
   preferredShell: string;
   customToolPaths: Record<string, string>;
   themeColor: string;
+  terminalFontSize: number;
+  terminalFontFamily: string;
+  terminalBackground: string;
+  terminalForeground: string;
 }
 
 export interface TerminalSession {

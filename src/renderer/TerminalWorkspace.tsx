@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Maximize2, Plus, Terminal as TerminalIcon, X } from "lucide-react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import type { ShellProfile, TerminalSession } from "../shared/contracts";
+import type { AppSettings, ShellProfile, TerminalSession } from "../shared/contracts";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalTab {
@@ -20,16 +20,21 @@ function shellGlyph(profile: ShellProfile | undefined, name: string): string {
   return "⌘";
 }
 
-export default function TerminalWorkspace({ initialCwd, detached = false, onClose }: { initialCwd?: string; detached?: boolean; onClose?: () => void }): JSX.Element {
+export default function TerminalWorkspace({ initialCwd, settings, detached = false, onClose }: { initialCwd?: string; settings?: AppSettings; detached?: boolean; onClose?: () => void }): JSX.Element {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [shells, setShells] = useState<ShellProfile[]>([]);
   const [shellMenuOpen, setShellMenuOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [terminalSettings, setTerminalSettings] = useState(settings);
   const activeIdRef = useRef<string | null>(null);
   const terminals = useRef(new Map<string, { terminal: Terminal; fit: FitAddon; element: HTMLDivElement }>());
   const surfaces = useRef(new Map<string, HTMLDivElement>());
   const firstCwd = useRef(initialCwd);
+
+  useEffect(() => {
+    if (settings) setTerminalSettings(settings);
+  }, [settings]);
 
   useEffect(() => {
     if (!shellMenuOpen) return;
@@ -70,7 +75,7 @@ export default function TerminalWorkspace({ initialCwd, detached = false, onClos
       return next;
     });
   }
-  useEffect(() => { void window.npmui.settings.shells().then(setShells); void addTab(firstCwd.current); return () => { for (const id of terminals.current.keys()) void window.npmui.terminal.close(id); }; }, []);
+  useEffect(() => { void window.npmui.settings.shells().then(setShells); if (!settings) void window.npmui.settings.get().then(setTerminalSettings); void addTab(firstCwd.current); return () => { for (const id of terminals.current.keys()) void window.npmui.terminal.close(id); }; }, []);
   useEffect(() => {
     const disposeData = window.npmui.terminal.onData(({ id, data }) => terminals.current.get(id)?.terminal.write(data));
     const disposeExit = window.npmui.terminal.onExit(({ id }) => terminals.current.get(id)?.terminal.write("\r\n[process exited]\r\n"));
@@ -81,7 +86,8 @@ export default function TerminalWorkspace({ initialCwd, detached = false, onClos
     if (!tab) return;
     const container = surfaces.current.get(tab.session.id);
     if (!container || terminals.current.has(tab.session.id)) return;
-    const terminal = new Terminal({ cursorBlink: true, convertEol: true, fontFamily: "Cascadia Code, Consolas, monospace", fontSize: 13, theme: { background: "#17151f", foreground: "#e8e1f4", cursor: "#d5baff", selectionBackground: "#8066a466" }, scrollback: 5000 });
+    const appearance = terminalSettings;
+    const terminal = new Terminal({ cursorBlink: true, convertEol: true, fontFamily: appearance?.terminalFontFamily ?? "Cascadia Code, Consolas, monospace", fontSize: appearance?.terminalFontSize ?? 13, theme: { background: appearance?.terminalBackground ?? "#17151f", foreground: appearance?.terminalForeground ?? "#e8e1f4", cursor: appearance?.terminalForeground ?? "#e8e1f4", selectionBackground: "#8066a466" }, scrollback: 5000 });
     const fit = new FitAddon();
     terminal.loadAddon(fit); terminal.open(container); fit.fit();
     terminal.focus();
@@ -89,7 +95,7 @@ export default function TerminalWorkspace({ initialCwd, detached = false, onClos
     terminals.current.set(tab.session.id, { terminal, fit, element: container });
     void window.npmui.terminal.resize(tab.session.id, terminal.cols, terminal.rows);
     return () => undefined;
-  }, [tabs, activeId]);
+  }, [tabs, activeId, terminalSettings]);
   useEffect(() => {
     const id = activeId;
     const current = id ? terminals.current.get(id) : undefined;
