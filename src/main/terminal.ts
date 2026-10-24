@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import * as pty from "node-pty";
-import type { TerminalSession } from "../shared/contracts";
+import type { ShellProfile, TerminalSession } from "../shared/contracts";
 
 interface RuntimeTerminal {
   session: TerminalSession;
@@ -21,23 +21,22 @@ export function setTerminalListeners(
   exitListener = onExit;
 }
 
-function shellCommand(): string {
-  if (process.platform === "win32") return process.env.ComSpec ?? "cmd.exe";
-  return process.env.SHELL ?? "/bin/sh";
+function fallbackShell(): ShellProfile {
+  return { id: "system-default", name: "System default", command: process.platform === "win32" ? process.env.ComSpec ?? "cmd.exe" : process.env.SHELL ?? "/bin/sh", args: [], source: "system" };
 }
 
-export function createTerminal(cwd?: string): TerminalSession {
-  const shell = shellCommand();
+export function createTerminal(cwd?: string, profile?: ShellProfile): TerminalSession {
+  const selected = profile ?? fallbackShell();
   const workingDirectory = cwd && path.isAbsolute(cwd) ? cwd : os.homedir();
   const id = crypto.randomUUID();
-  const terminalProcess = pty.spawn(shell, [], {
+  const terminalProcess = pty.spawn(selected.command, selected.args, {
     name: "xterm-256color",
     cols: 100,
     rows: 30,
     cwd: workingDirectory,
     env: { ...process.env, TERM: "xterm-256color" } as Record<string, string>
   });
-  const session = { id, cwd: workingDirectory, shell };
+  const session = { id, cwd: workingDirectory, shell: selected.name };
   const runtime = { session, process: terminalProcess };
   sessions.set(id, runtime);
   terminalProcess.onData((data) => dataListener?.({ id, data }));

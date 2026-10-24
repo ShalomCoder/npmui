@@ -5,9 +5,9 @@ import type { AppSettings } from "../shared/contracts";
 
 const defaultSettings = (): AppSettings => ({
   projectsDirectory: app.getPath("documents"),
-  preferredShell: "powershell",
+  preferredShell: "",
   customToolPaths: {},
-  theme: "violet"
+  themeColor: "#69518f"
 });
 
 function settingsPath(): string {
@@ -20,9 +20,9 @@ export async function getSettings(): Promise<AppSettings> {
     if (typeof data.projectsDirectory === "string" && data.projectsDirectory.trim()) {
       return {
         projectsDirectory: path.resolve(data.projectsDirectory),
-        preferredShell: data.preferredShell === "cmd" ? "cmd" : "powershell",
+        preferredShell: typeof data.preferredShell === "string" ? data.preferredShell : "",
         customToolPaths: data.customToolPaths && typeof data.customToolPaths === "object" ? data.customToolPaths as Record<string, string> : {},
-        theme: ["violet", "ocean", "forest", "sunset", "mono"].includes(data.theme as string) ? data.theme as AppSettings["theme"] : "violet"
+        themeColor: typeof data.themeColor === "string" && /^#[0-9a-f]{6}$/i.test(data.themeColor) ? data.themeColor : "#69518f"
       };
     }
   } catch {
@@ -34,9 +34,9 @@ export async function getSettings(): Promise<AppSettings> {
 export async function saveSettings(settings: AppSettings): Promise<AppSettings> {
   const normalized: AppSettings = {
     projectsDirectory: path.resolve(settings.projectsDirectory),
-    preferredShell: settings.preferredShell === "cmd" ? "cmd" : "powershell",
+    preferredShell: typeof settings.preferredShell === "string" ? settings.preferredShell : "",
     customToolPaths: settings.customToolPaths ?? {},
-    theme: settings.theme ?? "violet"
+    themeColor: /^#[0-9a-f]{6}$/i.test(settings.themeColor) ? settings.themeColor : "#69518f"
   };
   try {
     await access(normalized.projectsDirectory);

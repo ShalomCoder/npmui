@@ -20,7 +20,8 @@ const api: NpmuiApi = {
   settings: {
     get: () => ipcRenderer.invoke("settings:get"),
     update: (settings: AppSettings) => ipcRenderer.invoke("settings:update", settings),
-    detectTools: () => ipcRenderer.invoke("settings:detect-tools")
+    detectTools: () => ipcRenderer.invoke("settings:detect-tools"),
+    shells: () => ipcRenderer.invoke("settings:shells")
   },
   packages: {
     search: (query) => ipcRenderer.invoke("packages:search", query),
@@ -33,11 +34,11 @@ const api: NpmuiApi = {
     create: (request) => ipcRenderer.invoke("creation:create", request)
   },
   terminal: {
-    create: (cwd) => ipcRenderer.invoke("terminal:create", cwd),
+    create: (cwd, shellId) => ipcRenderer.invoke("terminal:create", cwd, shellId),
     write: (id, data) => ipcRenderer.invoke("terminal:write", id, data),
     resize: (id, columns, rows) => ipcRenderer.invoke("terminal:resize", id, columns, rows),
     close: (id) => ipcRenderer.invoke("terminal:close", id),
-    openWindow: (cwd) => ipcRenderer.invoke("terminal:open-window", cwd),
+    openWindow: (cwd, shellId) => ipcRenderer.invoke("terminal:open-window", cwd, shellId),
     onData: (listener) => {
       const handler = (_event: Electron.IpcRendererEvent, event: Parameters<typeof listener>[0]) => listener(event);
       ipcRenderer.on("terminal:data", handler);

@@ -74,15 +74,23 @@ export interface CreateProjectRequest {
 
 export interface AppSettings {
   projectsDirectory: string;
-  preferredShell: "cmd" | "powershell";
+  preferredShell: string;
   customToolPaths: Record<string, string>;
-  theme: "violet" | "ocean" | "forest" | "sunset" | "mono";
+  themeColor: string;
 }
 
 export interface TerminalSession {
   id: string;
   cwd: string;
   shell: string;
+}
+
+export interface ShellProfile {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  source: string;
 }
 
 export interface NpmuiApi {
@@ -101,6 +109,7 @@ export interface NpmuiApi {
     get(): Promise<AppSettings>;
     update(settings: AppSettings): Promise<AppSettings>;
     detectTools(): Promise<ToolInfo[]>;
+    shells(): Promise<ShellProfile[]>;
   };
   packages: {
     search(query: string): Promise<PackageResult[]>;
@@ -113,11 +122,11 @@ export interface NpmuiApi {
     create(request: CreateProjectRequest): Promise<ManagedProcess>;
   };
   terminal: {
-    create(cwd?: string): Promise<TerminalSession>;
+    create(cwd?: string, shellId?: string): Promise<TerminalSession>;
     write(id: string, data: string): Promise<void>;
     resize(id: string, columns: number, rows: number): Promise<void>;
     close(id: string): Promise<void>;
-    openWindow(cwd?: string): Promise<void>;
+    openWindow(cwd?: string, shellId?: string): Promise<void>;
     onData(listener: (event: { id: string; data: string }) => void): () => void;
     onExit(listener: (event: { id: string; exitCode: number }) => void): () => void;
   };

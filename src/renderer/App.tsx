@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, FolderOpen, FolderSearch, LayoutDashboard, Package, PanelRight, Play, Plus, RefreshCw, Search, Settings, Sparkles, Square, TerminalSquare, Wrench } from "lucide-react";
-import type { AppSettings, CreateProjectRequest, DependencyInfo, ManagedProcess, PackageResult, Project, ToolInfo } from "../shared/contracts";
+import type { AppSettings, CreateProjectRequest, DependencyInfo, ManagedProcess, PackageResult, Project, ShellProfile, ToolInfo } from "../shared/contracts";
 import TerminalWorkspace from "./TerminalWorkspace";
 
 type View = "overview" | "processes" | "packages" | "settings";
@@ -23,7 +23,7 @@ function WorkspaceApp(): JSX.Element {
     setLoading(true);
     try {
       const [nextSettings, nextProjects, nextProcesses] = await Promise.all([window.npmui.settings.get(), window.npmui.projects.refresh(), window.npmui.projects.processes()]);
-      setSettings(nextSettings); document.documentElement.dataset.theme = nextSettings.theme; setProjects(nextProjects); setProcesses(nextProcesses);
+      setSettings(nextSettings); applyThemeColor(nextSettings.themeColor); setProjects(nextProjects); setProcesses(nextProcesses);
       setSelectedId((current) => current && nextProjects.some((project) => project.id === current) ? current : nextProjects[0]?.id ?? null);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not load workspace."); }
     finally { setLoading(false); }
@@ -32,7 +32,7 @@ function WorkspaceApp(): JSX.Element {
 
   async function chooseDirectory(): Promise<void> {
     const directory = await window.npmui.projects.selectDirectory(); if (!directory) return;
-    try { const next = await window.npmui.settings.update({ ...(settings ?? { preferredShell: "powershell", customToolPaths: {}, theme: "violet" }), projectsDirectory: directory }); setSettings(next); setProjects(await window.npmui.projects.refresh()); setMessage("Projects directory updated."); }
+    try { const next = await window.npmui.settings.update({ ...(settings ?? { preferredShell: "", customToolPaths: {}, themeColor: "#69518f" }), projectsDirectory: directory }); setSettings(next); setProjects(await window.npmui.projects.refresh()); setMessage("Projects directory updated."); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Could not update the projects directory."); }
   }
   const filtered = useMemo(() => { const term = query.trim().toLowerCase(); return term ? projects.filter((project) => `${project.name} ${project.path} ${project.framework ?? ""}`.toLowerCase().includes(term)) : projects; }, [projects, query]);
@@ -104,12 +104,14 @@ function CreateProject({ onClose, onMessage }: { onClose: () => void; onMessage:
 }
 
 function SettingsView({ settings, onSaved, onMessage }: { settings: AppSettings | null; onSaved: (settings: AppSettings) => void; onMessage: (message: string) => void }): JSX.Element {
-  const [tools, setTools] = useState<ToolInfo[]>([]); const [shell, setShell] = useState(settings?.preferredShell ?? "powershell");
-  useEffect(() => { void window.npmui.settings.detectTools().then(setTools); }, []);
-  async function save(): Promise<void> { if (!settings) return; try { const next = await window.npmui.settings.update({ ...settings, preferredShell: shell }); onSaved(next); onMessage("Settings saved."); } catch (error) { onMessage(error instanceof Error ? error.message : "Could not save settings."); } }
-  const [theme, setTheme] = useState(settings?.theme ?? "violet");
-  async function saveTheme(): Promise<void> { if (!settings) return; try { const next = await window.npmui.settings.update({ ...settings, preferredShell: shell, theme }); onSaved(next); onMessage("Settings saved."); document.documentElement.dataset.theme = theme; } catch (error) { onMessage(error instanceof Error ? error.message : "Could not save settings."); } }
-  return <section className="page-section"><div className="settings-card"><p className="eyebrow">Execution environment</p><h2>Settings</h2><label className="field-label">Preferred shell<select value={shell} onChange={(event) => setShell(event.target.value as "cmd" | "powershell")}><option value="powershell">PowerShell</option><option value="cmd">Command Prompt</option></select></label><label className="field-label">Color theme<select value={theme} onChange={(event) => { const next = event.target.value as typeof theme; setTheme(next); document.documentElement.dataset.theme = next; }}><option value="violet">Violet dusk</option><option value="ocean">Ocean terminal</option><option value="forest">Forest floor</option><option value="sunset">Sunset ember</option><option value="mono">Monochrome</option></select></label><button className="primary-button" onClick={() => void saveTheme()}>Save settings</button></div><div className="settings-card"><div className="section-heading"><div><p className="eyebrow">Local availability</p><h2>Toolchain</h2></div><Wrench size={20} /></div><div className="tool-grid">{tools.map((tool) => <div className="tool-row" key={tool.name}><span>{tool.name}</span><strong className={tool.available ? "available" : "unavailable"}>{tool.available ? tool.version : "Unavailable"}</strong><code>{tool.executable}</code></div>)}</div></div></section>;
+  const [tools, setTools] = useState<ToolInfo[]>([]); const [shells, setShells] = useState<ShellProfile[]>([]); const [shell, setShell] = useState(settings?.preferredShell ?? ""); const [color, setColor] = useState(settings?.themeColor ?? "#69518f");
+  useEffect(() => { void window.npmui.settings.detectTools().then(setTools); void window.npmui.settings.shells().then((profiles) => { setShells(profiles); if (!shell && profiles[0]) setShell(profiles[0].id); }); }, []);
+  async function save(): Promise<void> { if (!settings) return; try { const next = await window.npmui.settings.update({ ...settings, preferredShell: shell, themeColor: color }); onSaved(next); applyThemeColor(color); onMessage("Settings saved."); } catch (error) { onMessage(error instanceof Error ? error.message : "Could not save settings."); } }
+  return <section className="page-section"><div className="settings-card"><p className="eyebrow">Execution environment</p><h2>Settings</h2><label className="field-label">Windows Terminal profile<select value={shell} onChange={(event) => setShell(event.target.value)}>{shells.length === 0 ? <option value="">No Windows Terminal profiles found</option> : shells.map((profile) => <option value={profile.id} key={profile.id}>{profile.name}</option>)}</select></label><label className="field-label">Accent color<div className="color-control"><input type="color" value={color} onChange={(event) => { setColor(event.target.value); applyThemeColor(event.target.value); }} /><code>{color.toUpperCase()}</code></div></label><button className="primary-button" onClick={() => void save()}>Save settings</button></div><div className="settings-card"><div className="section-heading"><div><p className="eyebrow">Local availability</p><h2>Toolchain</h2></div><Wrench size={20} /></div><div className="tool-grid">{tools.map((tool) => <div className="tool-row" key={tool.name}><span>{tool.name}</span><strong className={tool.available ? "available" : "unavailable"}>{tool.available ? tool.version : "Unavailable"}</strong><code>{tool.executable}</code></div>)}</div></div></section>;
+}
+
+function applyThemeColor(color: string): void {
+  if (/^#[0-9a-f]{6}$/i.test(color)) document.documentElement.style.setProperty("--accent", color);
 }
 
 function ProjectDetailPage({ project, onBack, onMessage }: { project: Project; onBack: () => void; onMessage: (message: string) => void }): JSX.Element {

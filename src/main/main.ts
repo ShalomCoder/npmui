@@ -7,6 +7,7 @@ import { startProcess, listProcesses, setProcessListener, stopProcess } from "./
 import { detectTools } from "./tools";
 import { readDependencies, searchPackages } from "./packages";
 import { closeTerminal, createTerminal, resizeTerminal, setTerminalListeners, writeTerminal } from "./terminal";
+import { readShellProfiles, defaultTerminalDirectory } from "./shells";
 import type { AppSettings, CreateProjectRequest, Project } from "../shared/contracts";
 import { mkdir, writeFile, access } from "node:fs/promises";
 
@@ -41,7 +42,7 @@ function createWindow(): void {
   }
 }
 
-function createTerminalWindow(cwd?: string): void {
+function createTerminalWindow(cwd?: string, shellId?: string): void {
   terminalWindow = new BrowserWindow({
     width: 980,
     height: 620,
@@ -57,7 +58,7 @@ function createTerminalWindow(cwd?: string): void {
     }
   });
   terminalWindow.on("closed", () => { terminalWindow = null; });
-  const target = `#terminal${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`;
+  const target = `#terminal?${new URLSearchParams({ ...(cwd ? { cwd } : {}), ...(shellId ? { shell: shellId } : {}) }).toString()}`;
   if (!app.isPackaged) void terminalWindow.loadURL(`http://localhost:5173/${target}`);
   else void terminalWindow.loadFile(path.join(app.getAppPath(), "dist/index.html"), { hash: target.slice(1) });
 }
@@ -85,6 +86,7 @@ function registerIpc(): void {
     return saved;
   });
   ipcMain.handle("settings:detect-tools", async () => detectTools((await getSettings()).customToolPaths));
+  ipcMain.handle("settings:shells", () => readShellProfiles());
   ipcMain.handle("projects:list", async () => {
     if (cachedProjects.length === 0) await refreshProjects();
     return cachedProjects;
@@ -166,9 +168,13 @@ function registerIpc(): void {
       : ["create", "next-app@latest", request.name, "--", "--typescript", "--eslint", "--app"];
     return startProcess({ projectId: target.toLowerCase(), cwd: destination, label: `Create ${request.template} project`, executable, args });
   });
-  ipcMain.handle("terminal:create", (_event, cwd: unknown) => {
+  ipcMain.handle("terminal:create", async (_event, cwd: unknown, shellId: unknown) => {
     if (cwd !== undefined && typeof cwd !== "string") throw new Error("Invalid terminal directory.");
-    return createTerminal(cwd);
+    if (shellId !== undefined && typeof shellId !== "string") throw new Error("Invalid shell profile.");
+    const profiles = await readShellProfiles();
+    const settings = await getSettings();
+    const profile = profiles.find((item) => item.id === (shellId ?? settings.preferredShell)) ?? profiles[0];
+    return createTerminal(cwd || defaultTerminalDirectory(), profile);
   });
   ipcMain.handle("terminal:write", (_event, id: unknown, data: unknown) => {
     if (typeof id !== "string" || typeof data !== "string" || data.length > 20_000) throw new Error("Invalid terminal input.");
@@ -182,9 +188,10 @@ function registerIpc(): void {
     if (typeof id !== "string") throw new Error("Invalid terminal id.");
     closeTerminal(id);
   });
-  ipcMain.handle("terminal:open-window", (_event, cwd: unknown) => {
+  ipcMain.handle("terminal:open-window", (_event, cwd: unknown, shellId: unknown) => {
     if (cwd !== undefined && typeof cwd !== "string") throw new Error("Invalid terminal directory.");
-    createTerminalWindow(cwd);
+    if (shellId !== undefined && typeof shellId !== "string") throw new Error("Invalid shell profile.");
+    createTerminalWindow(cwd, shellId);
   });
   setTerminalListeners(
     (event) => {
