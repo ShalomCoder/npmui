@@ -6,7 +6,8 @@ import type { AppSettings } from "../shared/contracts";
 const defaultSettings = (): AppSettings => ({
   projectsDirectory: app.getPath("documents"),
   preferredShell: "powershell",
-  customToolPaths: {}
+  customToolPaths: {},
+  theme: "violet"
 });
 
 function settingsPath(): string {
@@ -20,7 +21,8 @@ export async function getSettings(): Promise<AppSettings> {
       return {
         projectsDirectory: path.resolve(data.projectsDirectory),
         preferredShell: data.preferredShell === "cmd" ? "cmd" : "powershell",
-        customToolPaths: data.customToolPaths && typeof data.customToolPaths === "object" ? data.customToolPaths as Record<string, string> : {}
+        customToolPaths: data.customToolPaths && typeof data.customToolPaths === "object" ? data.customToolPaths as Record<string, string> : {},
+        theme: ["violet", "ocean", "forest", "sunset", "mono"].includes(data.theme as string) ? data.theme as AppSettings["theme"] : "violet"
       };
     }
   } catch {
@@ -33,7 +35,8 @@ export async function saveSettings(settings: AppSettings): Promise<AppSettings> 
   const normalized: AppSettings = {
     projectsDirectory: path.resolve(settings.projectsDirectory),
     preferredShell: settings.preferredShell === "cmd" ? "cmd" : "powershell",
-    customToolPaths: settings.customToolPaths ?? {}
+    customToolPaths: settings.customToolPaths ?? {},
+    theme: settings.theme ?? "violet"
   };
   try {
     await access(normalized.projectsDirectory);

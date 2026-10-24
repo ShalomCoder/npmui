@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderOpen, FolderSearch, LayoutDashboard, Package, Play, Plus, RefreshCw, Search, Settings, Sparkles, Square, TerminalSquare, Wrench } from "lucide-react";
+import { ArrowLeft, FolderOpen, FolderSearch, LayoutDashboard, Package, PanelRight, Play, Plus, RefreshCw, Search, Settings, Sparkles, Square, TerminalSquare, Wrench } from "lucide-react";
 import type { AppSettings, CreateProjectRequest, DependencyInfo, ManagedProcess, PackageResult, Project, ToolInfo } from "../shared/contracts";
+import TerminalWorkspace from "./TerminalWorkspace";
 
 type View = "overview" | "processes" | "packages" | "settings";
 
-function App(): JSX.Element {
+function WorkspaceApp(): JSX.Element {
   const [view, setView] = useState<View>("overview");
   const [projects, setProjects] = useState<Project[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -14,12 +15,15 @@ function App(): JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalWidth, setTerminalWidth] = useState(430);
+  const [resizingTerminal, setResizingTerminal] = useState(false);
 
   async function load(): Promise<void> {
     setLoading(true);
     try {
       const [nextSettings, nextProjects, nextProcesses] = await Promise.all([window.npmui.settings.get(), window.npmui.projects.refresh(), window.npmui.projects.processes()]);
-      setSettings(nextSettings); setProjects(nextProjects); setProcesses(nextProcesses);
+      setSettings(nextSettings); document.documentElement.dataset.theme = nextSettings.theme; setProjects(nextProjects); setProcesses(nextProcesses);
       setSelectedId((current) => current && nextProjects.some((project) => project.id === current) ? current : nextProjects[0]?.id ?? null);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not load workspace."); }
     finally { setLoading(false); }
@@ -28,11 +32,19 @@ function App(): JSX.Element {
 
   async function chooseDirectory(): Promise<void> {
     const directory = await window.npmui.projects.selectDirectory(); if (!directory) return;
-    try { const next = await window.npmui.settings.update({ ...(settings ?? { preferredShell: "powershell", customToolPaths: {} }), projectsDirectory: directory }); setSettings(next); setProjects(await window.npmui.projects.refresh()); setMessage("Projects directory updated."); }
+    try { const next = await window.npmui.settings.update({ ...(settings ?? { preferredShell: "powershell", customToolPaths: {}, theme: "violet" }), projectsDirectory: directory }); setSettings(next); setProjects(await window.npmui.projects.refresh()); setMessage("Projects directory updated."); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Could not update the projects directory."); }
   }
   const filtered = useMemo(() => { const term = query.trim().toLowerCase(); return term ? projects.filter((project) => `${project.name} ${project.path} ${project.framework ?? ""}`.toLowerCase().includes(term)) : projects; }, [projects, query]);
   const selected = projects.find((project) => project.id === selectedId) ?? null;
+  useEffect(() => {
+    if (!resizingTerminal) return;
+    const move = (event: MouseEvent): void => setTerminalWidth(Math.max(320, Math.min(720, window.innerWidth - event.clientX)));
+    const stop = (): void => setResizingTerminal(false);
+    window.addEventListener("mousemove", move); window.addEventListener("mouseup", stop);
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", stop); };
+  }, [resizingTerminal]);
+  const selectedProjectView = view === "overview" && selected ? <ProjectDetailPage project={selected} onBack={() => setSelectedId("")} onMessage={setMessage} /> : null;
 
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand"><div className="brand-mark"><Sparkles size={17} /></div><span>npmUI</span></div><div className="nav-label">Workspace</div>
@@ -41,14 +53,15 @@ function App(): JSX.Element {
       <Nav icon={<Package size={17} />} label="Package explorer" active={view === "packages"} onClick={() => setView("packages")} />
       <div className="sidebar-spacer" /><div className="directory-card"><FolderOpen size={16} className="directory-icon" /><div className="directory-copy"><span>Projects directory</span><strong title={settings?.projectsDirectory}>{settings?.projectsDirectory ?? "Loading..."}</strong></div><button className="icon-button" onClick={() => void chooseDirectory()}><Settings size={16} /></button></div>
       <Nav icon={<Settings size={17} />} label="Settings" active={view === "settings"} onClick={() => setView("settings")} /></aside>
-    <main className="main-content"><header className="topbar"><div><p className="eyebrow">Local workspace</p><h1>{view === "overview" ? "Good to see you." : view === "processes" ? "Managed processes" : view === "packages" ? "Package explorer" : "Workspace settings"}</h1></div><div className="top-actions"><button className="secondary-button" onClick={() => setCreateOpen(true)}><Plus size={15} /> New project</button><button className="refresh-button" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""} /> Refresh</button></div></header>
+    <main className={`main-content ${terminalOpen ? "with-terminal" : ""}`}><header className="topbar"><div><p className="eyebrow">Local workspace</p><h1>{selectedProjectView ? selected?.name : view === "overview" ? "Good to see you." : view === "processes" ? "Managed processes" : view === "packages" ? "Package explorer" : "Workspace settings"}</h1></div><div className="top-actions">{selected && <button className="secondary-button" onClick={() => setTerminalOpen((current) => !current)}><PanelRight size={15} /> Terminal</button>}<button className="secondary-button" onClick={() => setCreateOpen(true)}><Plus size={15} /> New project</button><button className="refresh-button" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : ""} /> Refresh</button></div></header>
       {message && <div className="notice">{message}<button onClick={() => setMessage(null)}>Dismiss</button></div>}
-      {view === "overview" && <Overview projects={filtered} allProjects={projects} selected={selected} query={query} setQuery={setQuery} setSelectedId={setSelectedId} onMessage={setMessage} loading={loading} chooseDirectory={chooseDirectory} />}
+      {selectedProjectView ?? (view === "overview" && <Overview projects={filtered} allProjects={projects} selected={selected} query={query} setQuery={setQuery} setSelectedId={setSelectedId} onMessage={setMessage} loading={loading} chooseDirectory={chooseDirectory} />)}
       {view === "processes" && <ProcessView processes={processes} onStop={(id) => window.npmui.projects.stopProcess(id).catch((error) => setMessage(error instanceof Error ? error.message : "Could not stop process."))} />}
       {view === "packages" && <PackageView projects={projects} selected={selected} setSelectedId={setSelectedId} onMessage={setMessage} />}
       {view === "settings" && <SettingsView settings={settings} onSaved={setSettings} onMessage={setMessage} />}
       {createOpen && <CreateProject onClose={() => setCreateOpen(false)} onMessage={setMessage} />}
     </main>
+    {terminalOpen && <aside className="terminal-dock" style={{ width: terminalWidth }}><div className="terminal-resizer" onMouseDown={() => setResizingTerminal(true)} /><TerminalWorkspace initialCwd={selected?.path} onClose={() => setTerminalOpen(false)} /></aside>}
   </div>;
 }
 
@@ -94,7 +107,20 @@ function SettingsView({ settings, onSaved, onMessage }: { settings: AppSettings 
   const [tools, setTools] = useState<ToolInfo[]>([]); const [shell, setShell] = useState(settings?.preferredShell ?? "powershell");
   useEffect(() => { void window.npmui.settings.detectTools().then(setTools); }, []);
   async function save(): Promise<void> { if (!settings) return; try { const next = await window.npmui.settings.update({ ...settings, preferredShell: shell }); onSaved(next); onMessage("Settings saved."); } catch (error) { onMessage(error instanceof Error ? error.message : "Could not save settings."); } }
-  return <section className="page-section"><div className="settings-card"><p className="eyebrow">Execution environment</p><h2>Settings</h2><label className="field-label">Preferred shell<select value={shell} onChange={(event) => setShell(event.target.value as "cmd" | "powershell")}><option value="powershell">PowerShell</option><option value="cmd">Command Prompt</option></select></label><button className="primary-button" onClick={() => void save()}>Save settings</button></div><div className="settings-card"><div className="section-heading"><div><p className="eyebrow">Local availability</p><h2>Toolchain</h2></div><Wrench size={20} /></div><div className="tool-grid">{tools.map((tool) => <div className="tool-row" key={tool.name}><span>{tool.name}</span><strong className={tool.available ? "available" : "unavailable"}>{tool.available ? tool.version : "Unavailable"}</strong><code>{tool.executable}</code></div>)}</div></div></section>;
+  const [theme, setTheme] = useState(settings?.theme ?? "violet");
+  async function saveTheme(): Promise<void> { if (!settings) return; try { const next = await window.npmui.settings.update({ ...settings, preferredShell: shell, theme }); onSaved(next); onMessage("Settings saved."); document.documentElement.dataset.theme = theme; } catch (error) { onMessage(error instanceof Error ? error.message : "Could not save settings."); } }
+  return <section className="page-section"><div className="settings-card"><p className="eyebrow">Execution environment</p><h2>Settings</h2><label className="field-label">Preferred shell<select value={shell} onChange={(event) => setShell(event.target.value as "cmd" | "powershell")}><option value="powershell">PowerShell</option><option value="cmd">Command Prompt</option></select></label><label className="field-label">Color theme<select value={theme} onChange={(event) => { const next = event.target.value as typeof theme; setTheme(next); document.documentElement.dataset.theme = next; }}><option value="violet">Violet dusk</option><option value="ocean">Ocean terminal</option><option value="forest">Forest floor</option><option value="sunset">Sunset ember</option><option value="mono">Monochrome</option></select></label><button className="primary-button" onClick={() => void saveTheme()}>Save settings</button></div><div className="settings-card"><div className="section-heading"><div><p className="eyebrow">Local availability</p><h2>Toolchain</h2></div><Wrench size={20} /></div><div className="tool-grid">{tools.map((tool) => <div className="tool-row" key={tool.name}><span>{tool.name}</span><strong className={tool.available ? "available" : "unavailable"}>{tool.available ? tool.version : "Unavailable"}</strong><code>{tool.executable}</code></div>)}</div></div></section>;
 }
 
-export default App;
+function ProjectDetailPage({ project, onBack, onMessage }: { project: Project; onBack: () => void; onMessage: (message: string) => void }): JSX.Element {
+  return <section className="project-detail-page"><button className="back-button" onClick={onBack}><ArrowLeft size={15} /> All projects</button><div className="project-detail-hero"><div className="project-detail-avatar">{project.name.slice(0, 1).toUpperCase()}</div><div><p className="eyebrow">Project workspace</p><h2>{project.name}</h2><p>{project.path}</p></div><span className="project-kind">{project.framework ?? "Node.js"}</span></div><ProjectDetails project={project} onMessage={onMessage} /></section>;
+}
+
+export default function App(): JSX.Element {
+  if (window.location.hash.startsWith("#terminal")) {
+    const query = window.location.hash.split("?")[1] ?? "";
+    const cwd = new URLSearchParams(query).get("cwd") ?? undefined;
+    return <TerminalWorkspace initialCwd={cwd} detached />;
+  }
+  return <WorkspaceApp />;
+}

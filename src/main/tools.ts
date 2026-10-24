@@ -5,7 +5,7 @@ const tools = ["node", "npm", "pnpm", "yarn", "git", "python", "php"];
 
 async function detect(name: string, executable: string): Promise<ToolInfo> {
   return new Promise((resolve) => {
-    const child = spawn(executable, ["--version"], { windowsHide: true, shell: false });
+    const child = spawn(executable, ["--version"], { windowsHide: true, shell: executable.endsWith(".cmd") });
     let output = "";
     child.stdout?.on("data", (chunk) => { output += chunk.toString(); });
     child.stderr?.on("data", (chunk) => { output += chunk.toString(); });

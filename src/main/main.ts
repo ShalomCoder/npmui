@@ -6,11 +6,13 @@ import { getSettings, saveSettings } from "./settings";
 import { startProcess, listProcesses, setProcessListener, stopProcess } from "./processes";
 import { detectTools } from "./tools";
 import { readDependencies, searchPackages } from "./packages";
+import { closeTerminal, createTerminal, resizeTerminal, setTerminalListeners, writeTerminal } from "./terminal";
 import type { AppSettings, CreateProjectRequest, Project } from "../shared/contracts";
 import { mkdir, writeFile, access } from "node:fs/promises";
 
 let mainWindow: BrowserWindow | null = null;
 let cachedProjects: Project[] = [];
+let terminalWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -37,6 +39,27 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(path.join(app.getAppPath(), "dist/index.html"));
   }
+}
+
+function createTerminalWindow(cwd?: string): void {
+  terminalWindow = new BrowserWindow({
+    width: 980,
+    height: 620,
+    minWidth: 620,
+    minHeight: 360,
+    title: "npmUI Terminal",
+    backgroundColor: "#17151f",
+    webPreferences: {
+      preload: path.join(__dirname, "../preload/preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  terminalWindow.on("closed", () => { terminalWindow = null; });
+  const target = `#terminal${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`;
+  if (!app.isPackaged) void terminalWindow.loadURL(`http://localhost:5173/${target}`);
+  else void terminalWindow.loadFile(path.join(app.getAppPath(), "dist/index.html"), { hash: target.slice(1) });
 }
 
 async function refreshProjects(): Promise<Project[]> {
@@ -143,6 +166,36 @@ function registerIpc(): void {
       : ["create", "next-app@latest", request.name, "--", "--typescript", "--eslint", "--app"];
     return startProcess({ projectId: target.toLowerCase(), cwd: destination, label: `Create ${request.template} project`, executable, args });
   });
+  ipcMain.handle("terminal:create", (_event, cwd: unknown) => {
+    if (cwd !== undefined && typeof cwd !== "string") throw new Error("Invalid terminal directory.");
+    return createTerminal(cwd);
+  });
+  ipcMain.handle("terminal:write", (_event, id: unknown, data: unknown) => {
+    if (typeof id !== "string" || typeof data !== "string" || data.length > 20_000) throw new Error("Invalid terminal input.");
+    writeTerminal(id, data);
+  });
+  ipcMain.handle("terminal:resize", (_event, id: unknown, columns: unknown, rows: unknown) => {
+    if (typeof id !== "string" || typeof columns !== "number" || typeof rows !== "number") throw new Error("Invalid terminal size.");
+    resizeTerminal(id, columns, rows);
+  });
+  ipcMain.handle("terminal:close", (_event, id: unknown) => {
+    if (typeof id !== "string") throw new Error("Invalid terminal id.");
+    closeTerminal(id);
+  });
+  ipcMain.handle("terminal:open-window", (_event, cwd: unknown) => {
+    if (cwd !== undefined && typeof cwd !== "string") throw new Error("Invalid terminal directory.");
+    createTerminalWindow(cwd);
+  });
+  setTerminalListeners(
+    (event) => {
+      mainWindow?.webContents.send("terminal:data", event);
+      terminalWindow?.webContents.send("terminal:data", event);
+    },
+    (event) => {
+      mainWindow?.webContents.send("terminal:exit", event);
+      terminalWindow?.webContents.send("terminal:exit", event);
+    }
+  );
   setProcessListener((record) => mainWindow?.webContents.send("process:update", record));
 }
 

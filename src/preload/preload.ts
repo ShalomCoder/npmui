@@ -31,6 +31,23 @@ const api: NpmuiApi = {
   creation: {
     selectDestination: () => ipcRenderer.invoke("creation:select-destination"),
     create: (request) => ipcRenderer.invoke("creation:create", request)
+  },
+  terminal: {
+    create: (cwd) => ipcRenderer.invoke("terminal:create", cwd),
+    write: (id, data) => ipcRenderer.invoke("terminal:write", id, data),
+    resize: (id, columns, rows) => ipcRenderer.invoke("terminal:resize", id, columns, rows),
+    close: (id) => ipcRenderer.invoke("terminal:close", id),
+    openWindow: (cwd) => ipcRenderer.invoke("terminal:open-window", cwd),
+    onData: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, event: Parameters<typeof listener>[0]) => listener(event);
+      ipcRenderer.on("terminal:data", handler);
+      return () => ipcRenderer.removeListener("terminal:data", handler);
+    },
+    onExit: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, event: Parameters<typeof listener>[0]) => listener(event);
+      ipcRenderer.on("terminal:exit", handler);
+      return () => ipcRenderer.removeListener("terminal:exit", handler);
+    }
   }
 };
 

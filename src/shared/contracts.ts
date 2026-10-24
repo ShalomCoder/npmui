@@ -76,6 +76,13 @@ export interface AppSettings {
   projectsDirectory: string;
   preferredShell: "cmd" | "powershell";
   customToolPaths: Record<string, string>;
+  theme: "violet" | "ocean" | "forest" | "sunset" | "mono";
+}
+
+export interface TerminalSession {
+  id: string;
+  cwd: string;
+  shell: string;
 }
 
 export interface NpmuiApi {
@@ -104,6 +111,15 @@ export interface NpmuiApi {
   creation: {
     selectDestination(): Promise<string | null>;
     create(request: CreateProjectRequest): Promise<ManagedProcess>;
+  };
+  terminal: {
+    create(cwd?: string): Promise<TerminalSession>;
+    write(id: string, data: string): Promise<void>;
+    resize(id: string, columns: number, rows: number): Promise<void>;
+    close(id: string): Promise<void>;
+    openWindow(cwd?: string): Promise<void>;
+    onData(listener: (event: { id: string; data: string }) => void): () => void;
+    onExit(listener: (event: { id: string; exitCode: number }) => void): () => void;
   };
 }
 
