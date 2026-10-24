@@ -99,8 +99,10 @@ export function startProcess(options: {
   const append = (chunk: Buffer): void => {
     const text = chunk.toString();
     record.output += text;
-    const detectedUrl = text.match(/https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/\S*)?/i)?.[0];
-    if (detectedUrl) record.url = detectedUrl.replace(/[),.;]+$/, "");
+    const detectedUrl = record.output.match(/https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?#][^\s"'<>]*)?/i)?.[0]
+      ?? record.output.match(/(?:localhost|127\.0\.0\.1):\d+(?:[/?#][^\s"'<>]*)?/i)?.[0];
+    const normalizedUrl = detectedUrl?.startsWith("http") ? detectedUrl : detectedUrl ? `http://${detectedUrl}` : null;
+    if (normalizedUrl) record.url = normalizedUrl.replace(/[),.;]+$/, "");
     if (record.output.length > 200_000) record.output = record.output.slice(-200_000);
     persist();
     emit(runtime);

@@ -108,6 +108,19 @@ function registerIpc(): void {
     const project = getProject(projectId);
     await shell.openExternal(`vscode://file/${encodeURIComponent(project.path)}`);
   });
+  ipcMain.handle("projects:open-url", async (_event, value: unknown) => {
+    if (typeof value !== "string") throw new Error("Invalid URL.");
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error("Invalid URL.");
+    }
+    if (!["http:", "https:"].includes(url.protocol) || !["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
+      throw new Error("Only local development URLs can be opened.");
+    }
+    await shell.openExternal(url.toString());
+  });
   ipcMain.handle("projects:run-script", async (_event, projectId: unknown, scriptName: unknown) => {
     const project = getProject(projectId);
     if (typeof scriptName !== "string" || !project.scripts.some((script) => script.name === scriptName)) throw new Error("Script is not available.");

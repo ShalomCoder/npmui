@@ -106,6 +106,7 @@ export interface NpmuiApi {
     refresh(): Promise<Project[]>;
     openInExplorer(projectId: string): Promise<void>;
     openInVscode(projectId: string): Promise<void>;
+    openUrl(url: string): Promise<void>;
     runScript(projectId: string, scriptName: string): Promise<ManagedProcess>;
     stopProcess(processId: string): Promise<void>;
     processes(): Promise<ManagedProcess[]>;

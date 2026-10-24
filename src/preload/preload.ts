@@ -8,6 +8,7 @@ const api: NpmuiApi = {
     refresh: () => ipcRenderer.invoke("projects:refresh"),
     openInExplorer: (projectId) => ipcRenderer.invoke("projects:open-explorer", projectId),
     openInVscode: (projectId) => ipcRenderer.invoke("projects:open-vscode", projectId),
+    openUrl: (url) => ipcRenderer.invoke("projects:open-url", url),
     runScript: (projectId, scriptName) => ipcRenderer.invoke("projects:run-script", projectId, scriptName),
     stopProcess: (processId) => ipcRenderer.invoke("projects:stop-process", processId),
     processes: () => ipcRenderer.invoke("projects:processes"),
