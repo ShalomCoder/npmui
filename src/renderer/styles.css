@@ -5,8 +5,8 @@
 body { margin: 0; min-width: 1050px; }
 button, input { font: inherit; }
 button { cursor: pointer; }
-.app-shell { display: flex; min-height: 100vh; }
-.sidebar { width: 252px; padding: 28px 16px 18px; background: linear-gradient(165deg, #211c32 0%, #2d2541 56%, #382d4b 100%); color: #c4bfd5; display: flex; flex-direction: column; box-shadow: 14px 0 35px #2c203914; }
+.app-shell { min-height: 100vh; }
+.sidebar { position: fixed; inset: 0 auto 0 0; width: 252px; height: 100vh; padding: 28px 16px 18px; background: linear-gradient(165deg, #211c32 0%, #2d2541 56%, #382d4b 100%); color: #c4bfd5; display: flex; flex-direction: column; box-shadow: 14px 0 35px #2c203914; overflow-y: auto; z-index: 5; }
 .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-size: 18px; font-weight: 800; letter-spacing: -.04em; padding: 0 12px 42px; }
 .brand-mark { display: grid; place-items: center; width: 28px; height: 28px; color: #2b2540; background: #d9c7ff; border-radius: 9px; }
 .nav-label, .eyebrow, .detail-label { text-transform: uppercase; letter-spacing: .11em; font-size: 10px; font-weight: 800; }
@@ -20,7 +20,7 @@ button { cursor: pointer; }
 .directory-copy { min-width: 0; display: grid; gap: 4px; flex: 1; }
 .directory-copy span { font-size: 10px; color: #988fa9; }.directory-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: #e4dff0; font-weight: 600; }
 .icon-button { border: 0; background: transparent; color: #afa5c0; padding: 4px; }
-.main-content { flex: 1; max-width: 1400px; margin: 0 auto; padding: 44px 58px 80px; overflow: hidden; background: radial-gradient(circle at 90% 2%, #e6dafa 0, #f5f3f9 27rem); }
+.main-content { min-height: 100vh; max-width: 1400px; margin: 0 auto; margin-left: 252px; padding: 44px 58px 80px; overflow: hidden; background: radial-gradient(circle at 90% 2%, #e6dafa 0, #f5f3f9 27rem); }
 .topbar, .section-heading, .details-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .top-actions { display: flex; align-items: center; gap: 8px; }
 .eyebrow { color: #9389a5; margin: 0 0 7px; }
