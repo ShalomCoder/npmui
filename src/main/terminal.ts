@@ -26,7 +26,7 @@ function fallbackShell(): ShellProfile {
 }
 
 export function createTerminal(cwd?: string, profile?: ShellProfile): TerminalSession {
-  const selected = profile ?? fallbackShell();
+  const selected = profile && profile.command.trim() ? profile : fallbackShell();
   const workingDirectory = cwd && path.isAbsolute(cwd) ? cwd : os.homedir();
   const id = crypto.randomUUID();
   const terminalProcess = pty.spawn(selected.command, selected.args, {

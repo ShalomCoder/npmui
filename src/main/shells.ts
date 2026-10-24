@@ -16,6 +16,16 @@ function splitCommandLine(commandLine: string): { command: string; args: string[
   return { command: parts[0] ?? "", args: parts.slice(1) };
 }
 
+function inferCommand(name: string): { command: string; args: string[] } {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("command prompt") || normalized === "cmd") return { command: process.env.ComSpec ?? "cmd.exe", args: [] };
+  if (normalized.includes("powershell")) return { command: normalized.includes("core") ? "pwsh.exe" : "powershell.exe", args: [] };
+  if (normalized.includes("ubuntu") || normalized.includes("debian") || normalized.includes("kali") || normalized.includes("linux")) {
+    return { command: "wsl.exe", args: ["-d", name] };
+  }
+  return { command: "", args: [] };
+}
+
 function configCandidates(): string[] {
   if (process.platform !== "win32") return [];
   const localAppData = process.env.LOCALAPPDATA;
@@ -35,9 +45,10 @@ export async function readShellProfiles(): Promise<ShellProfile[]> {
       const profiles = parsed.profiles?.list ?? [];
       const result = profiles.flatMap((profile): ShellProfile[] => {
         const commandLine = typeof profile.commandline === "string" ? profile.commandline : typeof profile.executable === "string" ? profile.executable : "";
-        const split = splitCommandLine(commandLine);
         const name = typeof profile.name === "string" ? profile.name : "Windows Terminal profile";
-        if (!split.command) return [];
+        const explicit = splitCommandLine(commandLine);
+        const split = explicit.command ? explicit : inferCommand(name);
+        if (!split.command.trim()) return [];
         return [{
           id: typeof profile.guid === "string" ? profile.guid : name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
           name,
