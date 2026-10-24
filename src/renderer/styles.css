@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 :root { --accent: #69518f; --accent-deep: color-mix(in srgb, var(--accent) 42%, #171522); --accent-soft: color-mix(in srgb, var(--accent) 12%, #fff); --page: color-mix(in srgb, var(--accent) 3%, #f7f6f9); --ink: #242231; font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif; color: var(--ink); background: var(--page); font-synthesis: none; }
-* { box-sizing: border-box; }
+* { box-sizing: border-box; user-select: none; }
+input, textarea, select, [contenteditable="true"], .xterm, .xterm * { user-select: text; }
 body { margin: 0; min-width: 1050px; }
 button, input { font: inherit; }
 button { cursor: pointer; }
