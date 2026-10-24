@@ -13,15 +13,22 @@ interface TerminalTab {
 export default function TerminalWorkspace({ initialCwd, detached = false, onClose }: { initialCwd?: string; detached?: boolean; onClose?: () => void }): JSX.Element {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const activeIdRef = useRef<string | null>(null);
   const terminals = useRef(new Map<string, { terminal: Terminal; fit: FitAddon; element: HTMLDivElement }>());
+  const surfaces = useRef(new Map<string, HTMLDivElement>());
   const firstCwd = useRef(initialCwd);
 
   async function addTab(cwd?: string): Promise<void> {
-    const session = await window.npmui.terminal.create(cwd);
-    setTabs((current) => [...current, { session, title: session.cwd.split(/[\\/]/).pop() || "Terminal" }]);
-    setActiveId(session.id);
-    activeIdRef.current = session.id;
+    try {
+      setError(null);
+      const session = await window.npmui.terminal.create(cwd);
+      setTabs((current) => [...current, { session, title: session.cwd.split(/[\\/]/).pop() || "Terminal" }]);
+      setActiveId(session.id);
+      activeIdRef.current = session.id;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The shell could not be started.");
+    }
   }
   async function closeTab(id: string): Promise<void> {
     await window.npmui.terminal.close(id);
@@ -44,9 +51,9 @@ export default function TerminalWorkspace({ initialCwd, detached = false, onClos
   useEffect(() => {
     const tab = tabs.find((item) => item.session.id === activeId);
     if (!tab) return;
-    const container = document.querySelector<HTMLDivElement>(`[data-terminal="${tab.session.id}"]`);
+    const container = surfaces.current.get(tab.session.id);
     if (!container || terminals.current.has(tab.session.id)) return;
-    const terminal = new Terminal({ cursorBlink: true, fontFamily: "Cascadia Code, Consolas, monospace", fontSize: 13, theme: { background: "#17151f", foreground: "#e8e1f4", cursor: "#d5baff", selectionBackground: "#8066a466" }, scrollback: 5000 });
+    const terminal = new Terminal({ cursorBlink: true, convertEol: true, fontFamily: "Cascadia Code, Consolas, monospace", fontSize: 13, theme: { background: "#17151f", foreground: "#e8e1f4", cursor: "#d5baff", selectionBackground: "#8066a466" }, scrollback: 5000 });
     const fit = new FitAddon();
     terminal.loadAddon(fit); terminal.open(container); fit.fit();
     terminal.focus();
@@ -73,6 +80,6 @@ export default function TerminalWorkspace({ initialCwd, detached = false, onClos
   return <div className={`terminal-workspace ${detached ? "terminal-detached" : ""}`}>
     <div className="terminal-toolbar"><div className="terminal-title"><TerminalIcon size={15} /><span>Terminal</span></div><div className="terminal-controls"><button onClick={() => void addTab(initialCwd)} title="New terminal"><Plus size={15} /></button>{!detached && <button onClick={() => void window.npmui.terminal.openWindow(initialCwd)} title="Open in window"><Maximize2 size={14} /></button>}{onClose && <button onClick={onClose} title="Hide terminal"><X size={15} /></button>}</div></div>
     <div className="terminal-tabs">{tabs.map((tab) => <button className={tab.session.id === activeId ? "active" : ""} key={tab.session.id} onClick={() => { setActiveId(tab.session.id); activeIdRef.current = tab.session.id; }}><span>{tab.title}</span><X size={12} onClick={(event) => { event.stopPropagation(); void closeTab(tab.session.id); }} /></button>)}</div>
-    <div className="terminal-surfaces" onClick={() => { const current = activeId ? terminals.current.get(activeId) : undefined; current?.terminal.focus(); }}>{tabs.map((tab) => <div className={`terminal-surface ${tab.session.id === activeId ? "visible" : ""}`} data-terminal={tab.session.id} key={tab.session.id}><span className="terminal-loading">Starting shell…</span></div>)}</div>
+    <div className="terminal-surfaces" onClick={() => { const current = activeId ? terminals.current.get(activeId) : undefined; current?.terminal.focus(); }}>{error ? <div className="terminal-error"><strong>Terminal unavailable</strong><span>{error}</span><button className="secondary-button" onClick={() => void addTab(initialCwd)}>Retry shell</button></div> : tabs.map((tab) => <div className={`terminal-surface ${tab.session.id === activeId ? "visible" : ""}`} key={tab.session.id} ref={(element) => { if (element) surfaces.current.set(tab.session.id, element); else surfaces.current.delete(tab.session.id); }}><span className="terminal-loading">Starting shell…</span></div>)}</div>
   </div>;
 }
