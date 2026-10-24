@@ -7,8 +7,7 @@ import { startProcess, listProcesses, setProcessListener, stopProcess } from "./
 import { detectTools } from "./tools";
 import { readDependencies, searchPackages } from "./packages";
 import type { AppSettings, CreateProjectRequest, Project } from "../shared/contracts";
-import { mkdir, readFile, writeFile, access } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { mkdir, writeFile, access } from "node:fs/promises";
 
 let mainWindow: BrowserWindow | null = null;
 let cachedProjects: Project[] = [];
@@ -131,11 +130,18 @@ function registerIpc(): void {
     if (request.template === "node" || request.template === "typescript") {
       await mkdir(target, { recursive: false });
       await writeFile(path.join(target, "package.json"), JSON.stringify({ name: request.name, version: "1.0.0", private: true, scripts: request.template === "typescript" ? { build: "tsc" } : {}, ...(request.template === "typescript" ? { devDependencies: { typescript: "^5.0.0" } } : {}) }, null, 2));
-      if (request.template === "typescript") await writeFile(path.join(target, "tsconfig.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "CommonJS", strict: true, outDir: "dist" }, include: ["src"] }, null, 2));
+      if (request.template === "typescript") {
+        await mkdir(path.join(target, "src"));
+        await writeFile(path.join(target, "tsconfig.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "CommonJS", strict: true, outDir: "dist" }, include: ["src"] }, null, 2));
+        await writeFile(path.join(target, "src", "index.ts"), 'console.log("Hello from npmUI");\n');
+      }
       return startProcess({ projectId: target.toLowerCase(), cwd: target, label: "Install dependencies", executable: process.platform === "win32" ? `${request.packageManager}.cmd` : request.packageManager, args: ["install"] });
     }
     const executable = process.platform === "win32" ? `${request.packageManager}.cmd` : request.packageManager;
-    return startProcess({ projectId: target.toLowerCase(), cwd: destination, label: `Create ${request.template} project`, executable, args: request.template === "vite" ? ["create", request.name, "--", "--template", "react-ts"] : ["create", request.name] });
+    const args = request.template === "vite"
+      ? ["create", "vite@latest", request.name, "--", "--template", "react-ts"]
+      : ["create", "next-app@latest", request.name, "--", "--typescript", "--eslint", "--app"];
+    return startProcess({ projectId: target.toLowerCase(), cwd: destination, label: `Create ${request.template} project`, executable, args });
   });
   setProcessListener((record) => mainWindow?.webContents.send("process:update", record));
 }

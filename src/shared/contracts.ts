@@ -38,6 +38,7 @@ export interface ManagedProcess {
   endedAt: string | null;
   exitCode: number | null;
   output: string;
+  url: string | null;
 }
 
 export interface ToolInfo {

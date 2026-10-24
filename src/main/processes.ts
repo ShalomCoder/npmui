@@ -42,7 +42,8 @@ export function startProcess(options: {
     startedAt: new Date().toISOString(),
     endedAt: null,
     exitCode: null,
-    output: ""
+    output: "",
+    url: null
   };
   const child = spawn(options.executable, options.args, {
     cwd: options.cwd,
@@ -53,7 +54,10 @@ export function startProcess(options: {
   const runtime = { record, child };
   runtimes.set(id, runtime);
   const append = (chunk: Buffer): void => {
-    record.output += chunk.toString();
+    const text = chunk.toString();
+    record.output += text;
+    const detectedUrl = text.match(/https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/\S*)?/i)?.[0];
+    if (detectedUrl) record.url = detectedUrl.replace(/[),.;]+$/, "");
     if (record.output.length > 200_000) record.output = record.output.slice(-200_000);
     emit(runtime);
   };

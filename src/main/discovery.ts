@@ -39,12 +39,15 @@ function getScripts(packageJson: Record<string, unknown>): ProjectScript[] {
     .map(([name, command]) => ({ name, command }));
 }
 
-function detectPackageManager(_projectPath: string, packageJson: Record<string, unknown>): Project["packageManager"] {
+function detectPackageManager(_projectPath: string, packageJson: Record<string, unknown>, entries: string[]): Project["packageManager"] {
   if (packageJson.packageManager && typeof packageJson.packageManager === "string") {
     const manager = packageJson.packageManager.split("@")[0];
     if (manager === "npm" || manager === "pnpm" || manager === "yarn") return manager;
   }
-  return null;
+  if (entries.includes("pnpm-lock.yaml")) return "pnpm";
+  if (entries.includes("yarn.lock")) return "yarn";
+  if (entries.includes("package-lock.json")) return "npm";
+  return "npm";
 }
 
 async function discoverProject(projectPath: string): Promise<Project | null> {
@@ -69,13 +72,14 @@ async function discoverProject(projectPath: string): Promise<Project | null> {
     }
   }
 
+  const packageManager = error ? null : detectPackageManager(projectPath, packageJson, entries);
   return {
     id: projectId(projectPath),
     name: typeof packageJson.name === "string" ? packageJson.name : path.basename(projectPath),
     path: projectPath,
     kind: hasPackageJson ? "node" : "directory",
     framework: error ? null : detectFramework(packageJson),
-    packageManager: error ? null : detectPackageManager(projectPath, packageJson),
+    packageManager,
     scripts: error ? [] : getScripts(packageJson),
     dependencies: error ? { production: 0, development: 0, peer: 0 } : getDependencies(packageJson),
     git: hasGit,
