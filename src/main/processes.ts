@@ -1,5 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { app } from "electron";
 import type { ManagedProcess } from "../shared/contracts";
 
 type OutputListener = (process: ManagedProcess) => void;
@@ -10,14 +13,51 @@ interface RuntimeProcess {
 }
 
 const runtimes = new Map<string, RuntimeProcess>();
+const history = new Map<string, ManagedProcess>();
 let listener: OutputListener | null = null;
+let hydrated = false;
+
+function historyPath(): string {
+  return path.join(app.getPath("userData"), "processes.json");
+}
+
+function persist(): void {
+  try {
+    const records = [...history.values()].slice(-200);
+    writeFileSync(historyPath(), JSON.stringify(records, null, 2), "utf8");
+  } catch {
+    // Process execution remains functional if history persistence is unavailable.
+  }
+}
+
+function hydrate(): void {
+  if (hydrated) return;
+  hydrated = true;
+  try {
+    if (!existsSync(historyPath())) return;
+    const records = JSON.parse(readFileSync(historyPath(), "utf8")) as ManagedProcess[];
+    for (const record of records) {
+      if (!record || typeof record.id !== "string") continue;
+      if (record.status === "running") {
+        record.status = "terminated";
+        record.endedAt = record.endedAt ?? new Date().toISOString();
+        record.output += "\n[npmUI closed while this process was running]\n";
+      }
+      history.set(record.id, record);
+    }
+    persist();
+  } catch {
+    // Ignore malformed historical records and continue with an empty process history.
+  }
+}
 
 export function setProcessListener(next: OutputListener): void {
   listener = next;
 }
 
 export function listProcesses(): ManagedProcess[] {
-  return [...runtimes.values()].map(({ record }) => record);
+  hydrate();
+  return [...history.values()];
 }
 
 function emit(runtime: RuntimeProcess): void {
@@ -31,6 +71,7 @@ export function startProcess(options: {
   executable: string;
   args: string[];
 }): ManagedProcess {
+  hydrate();
   const id = crypto.randomUUID();
   const command = [options.executable, ...options.args].join(" ");
   const record: ManagedProcess = {
@@ -48,17 +89,20 @@ export function startProcess(options: {
   const child = spawn(options.executable, options.args, {
     cwd: options.cwd,
     windowsHide: true,
-    shell: false,
+    shell: process.platform === "win32" && options.executable.toLowerCase().endsWith(".cmd"),
     env: { ...process.env, FORCE_COLOR: "0" }
   });
   const runtime = { record, child };
   runtimes.set(id, runtime);
+  history.set(id, record);
+  persist();
   const append = (chunk: Buffer): void => {
     const text = chunk.toString();
     record.output += text;
     const detectedUrl = text.match(/https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/\S*)?/i)?.[0];
     if (detectedUrl) record.url = detectedUrl.replace(/[),.;]+$/, "");
     if (record.output.length > 200_000) record.output = record.output.slice(-200_000);
+    persist();
     emit(runtime);
   };
   child.stdout?.on("data", append);
@@ -67,12 +111,14 @@ export function startProcess(options: {
     record.output += `${error.message}\n`;
     record.status = "failed";
     record.endedAt = new Date().toISOString();
+    persist();
     emit(runtime);
   });
   child.on("close", (code) => {
     if (record.status === "running") record.status = code === 0 ? "completed" : "failed";
     record.exitCode = code;
     record.endedAt = new Date().toISOString();
+    persist();
     emit(runtime);
   });
   emit(runtime);
@@ -92,6 +138,7 @@ export async function stopProcess(id: string): Promise<void> {
     runtime.child.kill("SIGTERM");
   }
   runtime.record.status = "terminated";
-  runtime.record.endedAt = new Date().toISOString();
+  runtime.  record.endedAt = new Date().toISOString();
+  persist();
   emit(runtime);
 }
