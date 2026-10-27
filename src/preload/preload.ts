@@ -22,6 +22,7 @@ const api: NpmuiApi = {
     get: () => ipcRenderer.invoke("settings:get"),
     update: (settings: AppSettings) => ipcRenderer.invoke("settings:update", settings),
     detectTools: () => ipcRenderer.invoke("settings:detect-tools"),
+    installTool: (tool) => ipcRenderer.invoke("settings:install-tool", tool),
     shells: () => ipcRenderer.invoke("settings:shells")
   },
   packages: {

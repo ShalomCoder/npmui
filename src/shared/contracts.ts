@@ -49,6 +49,8 @@ export interface ToolInfo {
   error: string | null;
 }
 
+export type InstallableTool = "node" | "git" | "pnpm" | "yarn" | "python" | "php";
+
 export interface PackageResult {
   name: string;
   version: string;
@@ -116,6 +118,7 @@ export interface NpmuiApi {
     get(): Promise<AppSettings>;
     update(settings: AppSettings): Promise<AppSettings>;
     detectTools(): Promise<ToolInfo[]>;
+    installTool(tool: InstallableTool): Promise<ManagedProcess>;
     shells(): Promise<ShellProfile[]>;
   };
   packages: {
