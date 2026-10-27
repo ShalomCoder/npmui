@@ -12,6 +12,7 @@
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "dist": "npm run build && electron-builder --win nsis",
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb",
     "dist:dir": "npm run build && electron-builder --win dir",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "preview": "vite preview"
@@ -40,7 +41,7 @@
   "build": {
     "appId": "com.npmui.desktop",
     "productName": "npmUI",
-    "artifactName": "${productName}-${version}-Setup.${ext}",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -67,6 +68,14 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "npmUI"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     }
   }
 }
